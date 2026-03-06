@@ -2,6 +2,7 @@
 import { useAuth } from "../../hooks/useAuth";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { supabase } from "../../lib/supabaseClient";
 
 interface Module {
   id: number;
@@ -21,7 +22,19 @@ export default function ModulesPage() {
   useEffect(() => {
     const fetchModules = async () => {
       try {
-        const res = await fetch("/api/modules");
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          throw new Error("No active session");
+        }
+
+        const res = await fetch("/api/modules", {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
         const payload = await res.json();
 
         if (!res.ok) {
@@ -31,7 +44,7 @@ export default function ModulesPage() {
         setModules(payload.modules || []);
       } catch (error) {
         console.error("Error fetching modules:", error);
-        setFetchError("Could not load modules. Please try again.");
+        setFetchError("Could not load modules. Please refresh the page.");
       }
       setFetchLoading(false);
     };

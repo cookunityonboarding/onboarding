@@ -1,20 +1,20 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { requireApiUser } from "../../../lib/apiAuth";
 
-export async function GET() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export async function GET(req: Request) {
+  const auth = await requireApiUser(req, [
+    "trainee",
+    "supervisor",
+    "lead",
+    "manager",
+    "assistant_manager",
+  ]);
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Missing Supabase environment variables" },
-      { status: 500 }
-    );
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
-
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await auth.supabaseAdmin
     .from("modules")
     .select("id, title, objective, icon, week, sort_order")
     .eq("week", 1)
