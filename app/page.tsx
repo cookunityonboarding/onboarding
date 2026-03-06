@@ -10,14 +10,35 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // if there's already a session, send to modules
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        router.push("/modules");
+  const getLandingRoute = async () => {
+    try {
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const payload = await res.json();
+      const role = payload?.user?.role;
+      const supervisorRoles = ["supervisor", "manager", "assistant_manager"];
+
+      if (supervisorRoles.includes(role)) {
+        return "/supervisor/trainees";
       }
-    });
-  }, []);
+    } catch (e) {
+      console.error("Could not resolve landing route:", e);
+    }
+
+    return "/modules";
+  };
+
+  // If there is already a session, redirect to the appropriate role home.
+  useEffect(() => {
+    const checkSessionAndRedirect = async () => {
+      const { data }: { data: { session: any } } = await supabase.auth.getSession();
+      if (data.session) {
+        const destination = await getLandingRoute();
+        router.push(destination);
+      }
+    };
+
+    checkSessionAndRedirect();
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +49,8 @@ export default function Home() {
     if (error) {
       setError(error.message);
     } else {
-      router.push("/modules");
+      const destination = await getLandingRoute();
+      router.push(destination);
     }
   };
 

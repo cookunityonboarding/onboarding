@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 
 interface Profile {
@@ -19,44 +20,15 @@ export function useAuth() {
         data: { session },
       } = await supabase.auth.getSession();
       if (session?.user) {
-        // fetch additional profile data from users table
-        const { data, error } = await supabase
-          .from("users")
-          .select("id,email,role,name")
-          .eq("id", session.user.id)
-          .single();
-        if (!error && data) {
-          setUser(data);
-        } else if (error?.code === "PGRST116") {
-          // Profile doesn't exist, create it via API
-          try {
-            const res = await fetch("/api/auth/sync-profile", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userId: session.user.id,
-                email: session.user.email,
-                name: session.user.user_metadata?.name || "",
-                role: "trainee",
-              }),
-            });
-            if (res.ok) {
-              setUser({
-                id: session.user.id,
-                email: session.user.email || "",
-                role: "trainee",
-                name: session.user.user_metadata?.name || "",
-              });
-            }
-          } catch (e) {
-            // Fallback to session data
-            setUser({
-              id: session.user.id,
-              email: session.user.email || "",
-              role: "trainee",
-              name: session.user.user_metadata?.name || "",
-            });
+        // Fetch profile via API using service role to avoid RLS issues
+        try {
+          const res = await fetch("/api/auth/me");
+          const payload = await res.json();
+          if (res.ok && payload.user) {
+            setUser(payload.user);
           }
+        } catch (e) {
+          console.error("Failed to load user profile:", e);
         }
       }
       setLoading(false);
@@ -64,45 +36,17 @@ export function useAuth() {
     load();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (_event: AuthChangeEvent, session: Session | null) => {
         if (session?.user) {
-          const { data, error } = await supabase
-            .from("users")
-            .select("id,email,role,name")
-            .eq("id", session.user.id)
-            .single();
-          if (!error && data) {
-            setUser(data);
-          } else if (error?.code === "PGRST116") {
-            // Profile doesn't exist, create it
-            try {
-              const res = await fetch("/api/auth/sync-profile", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  userId: session.user.id,
-                  email: session.user.email,
-                  name: session.user.user_metadata?.name || "",
-                  role: "trainee",
-                }),
-              });
-              if (res.ok) {
-                setUser({
-                  id: session.user.id,
-                  email: session.user.email || "",
-                  role: "trainee",
-                  name: session.user.user_metadata?.name || "",
-                });
-              }
-            } catch (e) {
-              // Fallback to session data
-              setUser({
-                id: session.user.id,
-                email: session.user.email || "",
-                role: "trainee",
-                name: session.user.user_metadata?.name || "",
-              });
+          // Fetch profile via API using service role
+          try {
+            const res = await fetch("/api/auth/me");
+            const payload = await res.json();
+            if (res.ok && payload.user) {
+              setUser(payload.user);
             }
+          } catch (e) {
+            console.error("Failed to load user profile:", e);
           }
         } else {
           setUser(null);

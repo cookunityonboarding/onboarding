@@ -1,16 +1,29 @@
 import { NextResponse } from "next/server";
-import { supabase } from "../../../../lib/supabaseClient";
+import { createClient } from "../../../../lib/supabase/server";
+import { createClient as createAdmin } from "@supabase/supabase-js";
 
-export async function GET(req: Request) {
-  const { data: { session }, error: sessErr } = await supabase.auth.getSession();
-  if (sessErr) return NextResponse.json({ error: sessErr.message }, { status: 400 });
-  if (!session) return NextResponse.json({ user: null });
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
 
-  const { data: user, error } = await supabase
+  if (!authUser) {
+    return NextResponse.json({ user: null });
+  }
+
+  const supabaseAdmin = createAdmin(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
+  const { data: user, error } = await supabaseAdmin
     .from("users")
     .select("id,email,role,name")
-    .eq("id", session.user.id)
+    .eq("id", authUser.id)
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
   return NextResponse.json({ user });
 }

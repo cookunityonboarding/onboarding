@@ -3,6 +3,7 @@ import { useAuth } from "../../hooks/useAuth";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "../../lib/supabaseClient";
+import { useRouter } from "next/navigation";
 
 interface Module {
   id: number;
@@ -15,11 +16,20 @@ interface Module {
 
 export default function ModulesPage() {
   const { user, loading } = useAuth();
+  const router = useRouter();
   const [modules, setModules] = useState<Module[]>([]);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
+    const supervisorRoles = ["supervisor", "manager", "assistant_manager"];
+
+    if (user && supervisorRoles.includes(user.role)) {
+      setFetchLoading(false);
+      router.replace("/supervisor/trainees");
+      return;
+    }
+
     const fetchModules = async () => {
       try {
         const {
@@ -52,7 +62,7 @@ export default function ModulesPage() {
     if (user) {
       fetchModules();
     }
-  }, [user]);
+  }, [user, router]);
 
   if (loading || fetchLoading) return <p className="p-8">Loading...</p>;
 
@@ -62,6 +72,11 @@ export default function ModulesPage() {
         <p>No user detected. Please log in.</p>
       </div>
     );
+  }
+
+  const supervisorRoles = ["supervisor", "manager", "assistant_manager"];
+  if (supervisorRoles.includes(user.role)) {
+    return <p className="p-8">Redirecting to supervisor panel...</p>;
   }
 
   return (
