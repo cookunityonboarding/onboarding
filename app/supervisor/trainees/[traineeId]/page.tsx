@@ -36,7 +36,14 @@ type ModuleCard = {
   title: string;
   week: number;
   sort_order: number;
+  criteria_list: string[] | null;
   exercises: Exercise[];
+  completion: {
+    criteriaChecked: number[];
+    criteriaMet: boolean;
+    markedComplete: boolean;
+    markedAt: string | null;
+  };
   stats: {
     totalChallenges: number;
     answeredChallenges: number;
@@ -54,6 +61,43 @@ export default function SupervisorTraineeDetailPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [gradingState, setGradingState] = useState<Record<number, boolean>>({});
   const [showRegrade, setShowRegrade] = useState<Record<number, boolean>>({});
+  const [completionState, setCompletionState] = useState<Record<number, boolean>>({});
+
+  const saveCompletion = async (
+    moduleId: number,
+    checkedIndexes: number[],
+    markedComplete: boolean
+  ) => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("No active session");
+    }
+
+    const res = await fetch(
+      `/api/supervisor/trainees/${traineeId}/modules/${moduleId}/completion`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          criteriaChecked: checkedIndexes,
+          markedComplete,
+        }),
+      }
+    );
+
+    const payload = await res.json();
+    if (!res.ok) {
+      throw new Error(payload.error || "Could not save completion progress");
+    }
+
+    return payload.completion;
+  };
 
   useEffect(() => {
     const loadTraineeDetail = async () => {
@@ -157,6 +201,140 @@ export default function SupervisorTraineeDetailPage() {
     }
   };
 
+  const handleToggleCriterion = async (
+    moduleId: number,
+    criterionIndex: number,
+    checked: boolean
+  ) => {
+    try {
+      setCompletionState((prev) => ({ ...prev, [moduleId]: true }));
+
+      const targetModule = modules.find((item) => item.id === moduleId);
+      if (!targetModule) {
+        throw new Error("Module not found in UI state");
+      }
+
+      const currentSet = new Set(targetModule.completion.criteriaChecked);
+      if (checked) {
+        currentSet.add(criterionIndex);
+      } else {
+        currentSet.delete(criterionIndex);
+      }
+
+      const nextChecked = Array.from(currentSet).sort((a, b) => a - b);
+      const completion = await saveCompletion(moduleId, nextChecked, false);
+
+      setModules((prev) =>
+        prev.map((moduleCard) => {
+          if (moduleCard.id !== moduleId) {
+            return moduleCard;
+          }
+
+          return {
+            ...moduleCard,
+            completion: {
+              criteriaChecked: Array.isArray(completion?.criteria_checked)
+                ? completion.criteria_checked
+                : [],
+              criteriaMet: Boolean(completion?.criteria_met),
+              markedComplete: Boolean(completion?.marked_complete),
+              markedAt: completion?.marked_at ?? null,
+            },
+          };
+        })
+      );
+    } catch (error) {
+      console.error("Error saving criteria progress:", error);
+      setFetchError("Could not save criteria progress. Please try again.");
+    } finally {
+      setCompletionState((prev) => ({ ...prev, [moduleId]: false }));
+    }
+  };
+
+  const handleMarkCompleted = async (moduleId: number) => {
+    try {
+      setCompletionState((prev) => ({ ...prev, [moduleId]: true }));
+
+      const targetModule = modules.find((item) => item.id === moduleId);
+      if (!targetModule) {
+        throw new Error("Module not found in UI state");
+      }
+
+      const completion = await saveCompletion(
+        moduleId,
+        targetModule.completion.criteriaChecked,
+        true
+      );
+
+      setModules((prev) =>
+        prev.map((moduleCard) => {
+          if (moduleCard.id !== moduleId) {
+            return moduleCard;
+          }
+
+          return {
+            ...moduleCard,
+            completion: {
+              criteriaChecked: Array.isArray(completion?.criteria_checked)
+                ? completion.criteria_checked
+                : [],
+              criteriaMet: Boolean(completion?.criteria_met),
+              markedComplete: Boolean(completion?.marked_complete),
+              markedAt: completion?.marked_at ?? null,
+            },
+          };
+        })
+      );
+    } catch (error) {
+      console.error("Error marking module as completed:", error);
+      setFetchError("Could not mark module as completed. Please try again.");
+    } finally {
+      setCompletionState((prev) => ({ ...prev, [moduleId]: false }));
+    }
+  };
+
+  const handleUnmarkCompleted = async (moduleId: number) => {
+    try {
+      setCompletionState((prev) => ({ ...prev, [moduleId]: true }));
+
+      const targetModule = modules.find((item) => item.id === moduleId);
+      if (!targetModule) {
+        throw new Error("Module not found in UI state");
+      }
+
+      const completion = await saveCompletion(
+        moduleId,
+        targetModule.completion.criteriaChecked,
+        false
+      );
+
+      setModules((prev) =>
+        prev.map((moduleCard) => {
+          if (moduleCard.id !== moduleId) {
+            return moduleCard;
+          }
+
+          return {
+            ...moduleCard,
+            completion: {
+              criteriaChecked: Array.isArray(completion?.criteria_checked)
+                ? completion.criteria_checked
+                : [],
+              criteriaMet: Boolean(completion?.criteria_met),
+              markedComplete: Boolean(completion?.marked_complete),
+              markedAt: completion?.marked_at ?? null,
+            },
+          };
+        })
+      );
+    } catch (error) {
+      console.error("Error unmarking module:", error);
+      setFetchError("Could not unmark module. Please try again.");
+    } finally {
+      setCompletionState((prev) => ({ ...prev, [moduleId]: false }));
+    }
+  };
+
   if (loading || fetchLoading) {
     return <p className="p-8">Loading trainee detail...</p>;
   }
@@ -194,11 +372,48 @@ export default function SupervisorTraineeDetailPage() {
 
       {fetchError ? <p className="text-red-600 mb-4">{fetchError}</p> : null}
 
+      {/* Quick navigation bar */}
+      {modules.length > 0 && (
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 py-3 mb-6 -mx-6 px-6 md:-mx-8 md:px-8">
+          <p className="text-xs text-gray-500 mb-2">Quick navigation:</p>
+          <div className="flex flex-wrap gap-2">
+            {modules.map((moduleCard, index) => (
+              <a
+                key={moduleCard.id}
+                href={`#module-${moduleCard.id}`}
+                className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-colors ${
+                  moduleCard.completion.markedComplete
+                    ? "bg-green-100 text-green-800 hover:bg-green-200"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+                title={moduleCard.title}
+              >
+                {index + 1}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-5">
-        {modules.map((moduleCard) => (
-          <section key={moduleCard.id} className="rounded-lg border border-gray-200 bg-white p-5">
+        {modules.map((moduleCard, index) => (
+          <section
+            key={moduleCard.id}
+            id={`module-${moduleCard.id}`}
+            className="rounded-lg border border-gray-300 bg-gray-50 p-5 shadow-sm scroll-mt-32"
+          >
             <div className="mb-4">
-              <h2 className="text-lg font-semibold text-[#2C282B]">{moduleCard.title}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-2xl font-bold text-[#2C282B] mr-1">
+                  Module {index + 1}.
+                </span>
+                <h2 className="text-lg font-semibold text-[#2C282B]">{moduleCard.title}</h2>
+                {moduleCard.completion.markedComplete ? (
+                  <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-green-800">
+                    Completed
+                  </span>
+                ) : null}
+              </div>
               <p className="text-sm text-gray-600 mt-1">
                 Week {moduleCard.week} | Answered {moduleCard.stats.answeredChallenges}/
                 {moduleCard.stats.totalChallenges} | Approved {moduleCard.stats.approvedChallenges}
@@ -270,6 +485,62 @@ export default function SupervisorTraineeDetailPage() {
                 ))}
               </div>
             )}
+
+            {moduleCard.criteria_list && moduleCard.criteria_list.length > 0 ? (
+              <div className="mt-5 rounded-md border border-gray-200 bg-gray-50 p-4">
+                <p className="text-sm font-semibold text-[#2C282B] mb-3">Completion Criteria</p>
+                <div className="space-y-2">
+                  {moduleCard.criteria_list.map((criterion, index) => {
+                    const isChecked = moduleCard.completion.criteriaChecked.includes(index);
+
+                    return (
+                      <label key={`${moduleCard.id}-${index}`} className="flex items-start gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={Boolean(completionState[moduleCard.id])}
+                          onChange={(event) =>
+                            handleToggleCriterion(moduleCard.id, index, event.target.checked)
+                          }
+                          className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                        />
+                        <span>{criterion}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  {!moduleCard.completion.markedComplete ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkCompleted(moduleCard.id)}
+                        disabled={
+                          Boolean(completionState[moduleCard.id]) ||
+                          moduleCard.completion.criteriaChecked.length !== moduleCard.criteria_list.length
+                        }
+                        className="rounded-full bg-[#2C282B] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1b181a] disabled:opacity-50"
+                      >
+                        Mark As Completed
+                      </button>
+                      <span className="text-xs text-gray-600">
+                        {moduleCard.completion.criteriaChecked.length}/{moduleCard.criteria_list.length} criteria checked
+                      </span>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleUnmarkCompleted(moduleCard.id)}
+                      disabled={Boolean(completionState[moduleCard.id])}
+                      className="rounded-full bg-blue-100 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-200 disabled:opacity-50"
+                    >
+                      UnMark Completed
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </section>
         ))}
       </div>

@@ -6,6 +6,7 @@ type ModuleRow = {
   title: string;
   week: number;
   sort_order: number;
+  criteria_list: string[] | null;
 };
 
 type ExerciseRow = {
@@ -22,6 +23,14 @@ type ResponseRow = {
   correct: boolean | null;
   graded_at: string | null;
   created_at: string;
+};
+
+type ModuleCompletionRow = {
+  module_id: number;
+  criteria_checked: number[] | null;
+  criteria_met: boolean | null;
+  marked_complete: boolean | null;
+  marked_at: string | null;
 };
 
 export async function GET(
@@ -61,7 +70,7 @@ export async function GET(
 
   const { data: modulesData, error: modulesError } = await auth.supabaseAdmin
     .from("modules")
-    .select("id,title,week,sort_order")
+    .select("id,title,week,sort_order,criteria_list")
     .order("week", { ascending: true })
     .order("sort_order", { ascending: true });
 
@@ -85,6 +94,16 @@ export async function GET(
   const exercises = (exercisesData ?? []) as ExerciseRow[];
   const exerciseIds = exercises.map((exercise) => exercise.id);
 
+  const { data: completionData, error: completionError } = await auth.supabaseAdmin
+    .from("module_completions")
+    .select("module_id,criteria_checked,criteria_met,marked_complete,marked_at")
+    .eq("user_id", traineeId)
+    .in("module_id", moduleIds);
+
+  if (completionError) {
+    return NextResponse.json({ error: completionError.message }, { status: 500 });
+  }
+
   const { data: responsesData, error: responsesError } = await auth.supabaseAdmin
     .from("responses")
     .select("id,exercise_id,answer,correct,graded_at,created_at")
@@ -97,6 +116,13 @@ export async function GET(
   }
 
   const responses = (responsesData ?? []) as ResponseRow[];
+  const completions = (completionData ?? []) as ModuleCompletionRow[];
+
+  const completionByModule = completions.reduce((acc, completion) => {
+    acc[completion.module_id] = completion;
+    return acc;
+  }, {} as Record<number, ModuleCompletionRow>);
+
   const latestResponseByExercise = responses.reduce((acc, response) => {
     if (!acc[response.exercise_id]) {
       acc[response.exercise_id] = response;
@@ -117,9 +143,19 @@ export async function GET(
       (exercise) => exercise.response?.correct === true
     ).length;
 
+    const completion = completionByModule[moduleRow.id];
+
     return {
       ...moduleRow,
       exercises: moduleExercises,
+      completion: {
+        criteriaChecked: Array.isArray(completion?.criteria_checked)
+          ? completion.criteria_checked
+          : [],
+        criteriaMet: Boolean(completion?.criteria_met),
+        markedComplete: Boolean(completion?.marked_complete),
+        markedAt: completion?.marked_at ?? null,
+      },
       stats: {
         totalChallenges: moduleExercises.length,
         answeredChallenges: answeredCount,

@@ -12,6 +12,8 @@ type Trainee = {
   role: string;
   active: boolean;
   created_at: string;
+  completedModules: number;
+  totalModules: number;
 };
 
 export default function SupervisorTraineesPage() {
@@ -91,19 +93,40 @@ export default function SupervisorTraineesPage() {
         <p className="text-gray-500">No active trainees found.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {trainees.map((trainee) => (
-            <Link
-              key={trainee.id}
-              href={`/supervisor/trainees/${trainee.id}`}
-              className="block rounded-lg border border-gray-200 bg-white p-5 hover:shadow-md transition-shadow"
-            >
-              <h2 className="text-lg font-semibold text-[#2C282B]">
-                {trainee.name || trainee.email}
-              </h2>
-              <p className="text-sm text-gray-600 mt-1">{trainee.email}</p>
-              <p className="text-xs text-gray-500 mt-3">Role: {trainee.role}</p>
-            </Link>
-          ))}
+          {trainees.map((trainee) => {
+            const progressPercentage = trainee.totalModules > 0
+              ? (trainee.completedModules / trainee.totalModules) * 100
+              : 0;
+
+            return (
+              <Link
+                key={trainee.id}
+                href={`/supervisor/trainees/${trainee.id}`}
+                className="block rounded-lg border border-gray-200 bg-white p-5 hover:shadow-md transition-shadow"
+              >
+                <h2 className="text-lg font-semibold text-[#2C282B]">
+                  {trainee.name || trainee.email}
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">{trainee.email}</p>
+                <p className="text-xs text-gray-500 mt-3">Role: {trainee.role}</p>
+                
+                <div className="mt-4">
+                  <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                    <span>Training Progress</span>
+                    <span className="font-semibold">
+                      {trainee.completedModules} / {trainee.totalModules} modules
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-green-600 h-2 rounded-full transition-all"
+                      style={{ width: `${progressPercentage}%` }}
+                    />
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
