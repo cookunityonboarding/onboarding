@@ -19,10 +19,14 @@ export async function GET() {
     .from("users")
     .select("id,email,role,name")
     .eq("id", authUser.id)
-    .single();
+    .maybeSingle();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (!user) {
+    return NextResponse.json({ user: null });
   }
 
   return NextResponse.json({ user });

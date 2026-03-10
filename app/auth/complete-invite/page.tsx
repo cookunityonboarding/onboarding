@@ -14,6 +14,23 @@ export default function CompleteInvitePage() {
   const [settingPassword, setSettingPassword] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
 
+  const getLandingRoute = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const payload = await res.json();
+      const role = payload?.user?.role;
+      const supervisorRoles = ["supervisor", "manager", "assistant_manager"];
+
+      if (supervisorRoles.includes(role)) {
+        return "/supervisor/trainees";
+      }
+    } catch (e) {
+      console.error("Could not resolve landing route:", e);
+    }
+
+    return "/modules";
+  }, []);
+
   const completeSetup = useCallback(async (session: Session) => {
     try {
       const userId = session.user.id;
@@ -36,7 +53,7 @@ export default function CompleteInvitePage() {
 
       if (!syncRes.ok) {
         const payload = await syncRes.json();
-        throw new Error(payload.error || "Error al sincronizar perfil");
+        throw new Error(payload.error || "Error syncing profile");
       }
 
       // Mark invitation as accepted
@@ -57,10 +74,11 @@ export default function CompleteInvitePage() {
       }
 
       setStatus("success");
+      const destination = await getLandingRoute();
 
-      // Redirect to modules page after 2 seconds
+      // Redirect to role landing page after 2 seconds.
       setTimeout(() => {
-        router.push("/modules");
+        router.push(destination);
       }, 2000);
     } catch (error) {
       console.error("Error completing setup:", error);
@@ -68,10 +86,10 @@ export default function CompleteInvitePage() {
       setError(
         error instanceof Error
           ? error.message
-          : "Error inesperado al completar la configuración"
+          : "Unexpected error completing setup"
       );
     }
-  }, [router]);
+  }, [getLandingRoute, router]);
 
   useEffect(() => {
     const checkInvitation = async () => {
@@ -92,7 +110,7 @@ export default function CompleteInvitePage() {
           if (sessionError) {
             console.error("Error setting session:", sessionError);
             setStatus("error");
-            setError("Error al procesar el token de invitación.");
+            setError("Error processing invitation token.");
             return;
           }
 
@@ -102,7 +120,7 @@ export default function CompleteInvitePage() {
             setStatus("password");
           } else {
             setStatus("error");
-            setError("Token de invitación inválido o expirado.");
+            setError("Invalid or expired invitation token.");
           }
         } else {
           // Check if already logged in (password already set)
@@ -114,13 +132,13 @@ export default function CompleteInvitePage() {
             await completeSetup(session);
           } else {
             setStatus("error");
-            setError("Link de invitación inválido. Por favor, verifica el enlace del email.");
+            setError("Invalid invitation link. Please check the link in your email.");
           }
         }
       } catch (error) {
         console.error("Error checking invitation:", error);
         setStatus("error");
-        setError("Error al procesar la invitación.");
+        setError("Error processing invitation.");
       }
     };
 
@@ -131,12 +149,12 @@ export default function CompleteInvitePage() {
     e.preventDefault();
 
     if (password !== confirmPassword) {
-      setError("Las contraseñas no coinciden");
+      setError("Passwords do not match");
       return;
     }
 
     if (password.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres");
+      setError("Password must be at least 6 characters");
       return;
     }
 
@@ -150,7 +168,7 @@ export default function CompleteInvitePage() {
       } = await supabase.auth.getSession();
 
       if (!currentSession) {
-        throw new Error("Sesión no encontrada. Por favor, intenta de nuevo con el link del email.");
+        throw new Error("Session not found. Please try again with the email link.");
       }
 
       // Update user password
@@ -178,7 +196,7 @@ export default function CompleteInvitePage() {
           if (fallbackSession) {
             await completeSetup(fallbackSession);
           } else {
-            throw new Error("No se pudo crear la sesión después de establecer la contraseña");
+            throw new Error("Could not create session after setting password");
           }
         } else {
           await completeSetup(newSession);
@@ -189,7 +207,7 @@ export default function CompleteInvitePage() {
       setError(
         error instanceof Error
           ? error.message
-          : "Error al establecer la contraseña"
+          : "Error setting password"
       );
       setSettingPassword(false);
     }
@@ -215,19 +233,19 @@ export default function CompleteInvitePage() {
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
             <h1 className="text-xl font-semibold text-gray-900 mb-2">
-              Verificando invitación...
+              Verifying invitation...
             </h1>
-            <p className="text-gray-600">Un momento por favor.</p>
+            <p className="text-gray-600">Please wait.</p>
           </div>
         )}
 
         {status === "password" && (
           <div>
             <h1 className="text-2xl font-bold text-orange-700 mb-2 text-center">
-              Bienvenido{userName ? `, ${userName}` : ""}!
+              Welcome{userName ? `, ${userName}` : ""}!
             </h1>
             <p className="text-gray-600 mb-6 text-center">
-              Establece tu contraseña para acceder al programa de entrenamiento
+              Set your password to access the training program
             </p>
 
             <form onSubmit={handleSetPassword} className="space-y-4">
@@ -236,14 +254,14 @@ export default function CompleteInvitePage() {
                   htmlFor="password"
                   className="block text-sm font-medium text-gray-700"
                 >
-                  Contraseña
+                  Password
                 </label>
                 <input
                   type="password"
                   id="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Minimum 6 characters"
                   className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
                   required
                   minLength={6}
@@ -255,14 +273,14 @@ export default function CompleteInvitePage() {
                   htmlFor="confirmPassword"
                   className="block text-sm font-medium text-gray-700"
                 >
-                  Confirmar contraseña
+                  Confirm Password
                 </label>
                 <input
                   type="password"
                   id="confirmPassword"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Repite la contraseña"
+                  placeholder="Repeat password"
                   className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
                   required
                   minLength={6}
@@ -276,7 +294,7 @@ export default function CompleteInvitePage() {
                 disabled={settingPassword}
                 className="w-full rounded-full bg-[#ffc84e] py-2 text-black hover:bg-[#ffb81c] disabled:opacity-50 font-semibold"
               >
-                {settingPassword ? "Configurando..." : "Crear contraseña"}
+                {settingPassword ? "Setting up..." : "Create Password"}
               </button>
             </form>
           </div>
@@ -300,13 +318,13 @@ export default function CompleteInvitePage() {
               </svg>
             </div>
             <h1 className="text-xl font-semibold text-gray-900 mb-2">
-              ¡Bienvenido al programa de entrenamiento!
+              Welcome to the training program!
             </h1>
             <p className="text-gray-600 mb-4">
-              Tu cuenta ha sido activada correctamente.
+              Your account has been activated successfully.
             </p>
             <p className="text-sm text-gray-500">
-              Redirigiendo a tu panel de entrenamiento...
+              Redirecting to your training dashboard...
             </p>
           </div>
         )}
@@ -329,14 +347,14 @@ export default function CompleteInvitePage() {
               </svg>
             </div>
             <h1 className="text-xl font-semibold text-gray-900 mb-2">
-              Error al procesar la invitación
+              Error processing invitation
             </h1>
             <p className="text-red-600 mb-4">{error}</p>
             <button
               onClick={() => router.push("/")}
               className="rounded-full bg-[#ffc84e] px-6 py-2 text-black hover:bg-[#ffb81c]"
             >
-              Volver al inicio
+              Back to Home
             </button>
           </div>
         )}

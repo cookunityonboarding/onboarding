@@ -67,7 +67,11 @@ export async function POST(req: Request) {
   try {
     // Generate unique token for tracking
     const token = crypto.randomUUID();
-    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/auth/complete-invite`;
+    
+    // Build redirect URL dynamically from request headers
+    const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+    const redirectTo = `${protocol}://${host}/auth/complete-invite`;
 
     // Invite user via Supabase Auth (sends email automatically)
     const { error: inviteError } =

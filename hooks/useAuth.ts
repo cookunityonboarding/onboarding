@@ -15,21 +15,57 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    async function fetchProfile(): Promise<Profile | null> {
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const payload = await res.json();
+
+      if (res.ok && payload.user) {
+        return payload.user;
+      }
+
+      return null;
+    }
+
+    async function syncProfileFromSession(session: Session) {
+      await fetch("/api/auth/sync-profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId: session.user.id,
+          email: session.user.email,
+          name: session.user.user_metadata?.name || "User",
+          role: session.user.user_metadata?.role || "trainee",
+        }),
+      });
+    }
+
+    async function loadProfile(session: Session) {
+      try {
+        const profile = await fetchProfile();
+        if (profile) {
+          setUser(profile);
+          return;
+        }
+
+        // First-login invite flow can have session before profile row exists.
+        await syncProfileFromSession(session);
+        const syncedProfile = await fetchProfile();
+        if (syncedProfile) {
+          setUser(syncedProfile);
+        }
+      } catch (e) {
+        console.error("Failed to load user profile:", e);
+      }
+    }
+
     async function load() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (session?.user) {
-        // Fetch profile via API using service role to avoid RLS issues
-        try {
-          const res = await fetch("/api/auth/me");
-          const payload = await res.json();
-          if (res.ok && payload.user) {
-            setUser(payload.user);
-          }
-        } catch (e) {
-          console.error("Failed to load user profile:", e);
-        }
+        await loadProfile(session);
       }
       setLoading(false);
     }
@@ -38,16 +74,7 @@ export function useAuth() {
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event: AuthChangeEvent, session: Session | null) => {
         if (session?.user) {
-          // Fetch profile via API using service role
-          try {
-            const res = await fetch("/api/auth/me");
-            const payload = await res.json();
-            if (res.ok && payload.user) {
-              setUser(payload.user);
-            }
-          } catch (e) {
-            console.error("Failed to load user profile:", e);
-          }
+          await loadProfile(session);
         } else {
           setUser(null);
         }

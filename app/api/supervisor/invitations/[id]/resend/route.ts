@@ -39,7 +39,10 @@ export async function POST(
   }
 
   try {
-    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/auth/complete-invite`;
+    // Build redirect URL dynamically from request headers
+    const protocol = req.headers.get('x-forwarded-proto') || 'http';
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+    const redirectTo = `${protocol}://${host}/auth/complete-invite`;
 
     // Resend invitation via Supabase Auth
     const { error: inviteError } =
