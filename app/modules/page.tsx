@@ -12,6 +12,11 @@ interface Module {
   icon?: string;
   week: number;
   sort_order: number;
+  criteria_list?: string[] | null;
+  completion?: {
+    criteriaChecked: number[];
+    markedComplete: boolean;
+  };
 }
 
 export default function ModulesPage() {
@@ -86,18 +91,84 @@ export default function ModulesPage() {
 
       {fetchError && <p className="mb-6 text-sm text-red-600">{fetchError}</p>}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {modules.map((module) => (
+      {modules.length > 0 && (
+        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 py-3 mb-6">
+          <p className="text-xs text-gray-500 mb-2">Quick navigation:</p>
+          <div className="flex flex-wrap gap-2">
+            {modules.map((module, index) => (
+              <a
+                key={`nav-${module.id}`}
+                href={`#module-${module.id}`}
+                className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold transition-colors ${
+                  module.completion?.markedComplete
+                    ? "bg-green-100 text-green-800 hover:bg-green-200"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+                title={module.title}
+              >
+                {index + 1}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-5">
+        {modules.map((module, index) => (
           <Link key={module.id} href={`/modules/${module.id}`}>
-            <div className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow cursor-pointer">
-              <div className="flex items-center mb-4">
+            <div
+              id={`module-${module.id}`}
+              className="w-full bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow cursor-pointer scroll-mt-24"
+            >
+              <div className="flex items-center mb-3">
                 {module.icon && <span className="text-2xl mr-3">{module.icon}</span>}
-                <h2 className="text-lg font-semibold text-[#2C282B]">{module.title}</h2>
+                <h2 className="text-lg font-semibold text-[#2C282B]">
+                  Module {index + 1}. {module.title}
+                </h2>
               </div>
               <p className="text-gray-700 mb-4">{module.objective}</p>
+
+              {Array.isArray(module.criteria_list) && module.criteria_list.length > 0 ? (
+                <div className="mb-5 rounded-md border border-gray-200 bg-gray-50 p-4">
+                  <p className="text-sm font-semibold text-[#2C282B] mb-3">Completion Criteria</p>
+                  <div className="space-y-2">
+                    {module.criteria_list.map((criterion, index) => {
+                      const isChecked = module.completion?.criteriaChecked.includes(index) ?? false;
+
+                      return (
+                        <div
+                          key={`${module.id}-${index}`}
+                          className="flex items-start gap-2 text-sm text-gray-700"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            readOnly
+                            tabIndex={-1}
+                            className="mt-1 h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500 pointer-events-none"
+                          />
+                          <span>{criterion}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+
+              <p className="text-xs text-gray-600 mb-2">
+                {(module.completion?.criteriaChecked.length ?? 0)}/
+                {Array.isArray(module.criteria_list) ? module.criteria_list.length : 0} criteria checked
+              </p>
+
               <div className="flex justify-between items-center">
                 <span className="text-sm text-[#ffc84e] font-medium">Week {module.week}</span>
-                <span className="text-sm text-gray-500">Not started</span>
+                <span
+                  className={`text-sm font-semibold ${
+                    module.completion?.markedComplete ? "text-green-700" : "text-gray-500"
+                  }`}
+                >
+                  {module.completion?.markedComplete ? "Completed" : "Not Completed"}
+                </span>
               </div>
             </div>
           </Link>
