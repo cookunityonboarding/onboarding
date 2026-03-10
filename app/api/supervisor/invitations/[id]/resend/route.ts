@@ -26,23 +26,29 @@ export async function POST(
 
   if (fetchError || !invitation) {
     return NextResponse.json(
-      { error: "Invitación no encontrada" },
+      { error: "Invitation not found" },
       { status: 404 }
     );
   }
 
   if (invitation.accepted) {
     return NextResponse.json(
-      { error: "Esta invitación ya fue aceptada" },
+      { error: "This invitation has already been accepted" },
       { status: 400 }
     );
   }
 
   try {
-    // Build redirect URL dynamically from request headers
-    const protocol = req.headers.get('x-forwarded-proto') || 'http';
-    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
-    const redirectTo = `${protocol}://${host}/auth/complete-invite`;
+    // Build redirect URL with stable fallbacks for local and deployed environments.
+    const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+    const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    const runtimeBaseUrl = forwardedHost ? `${forwardedProto}://${forwardedHost}` : null;
+    const configuredBaseUrl =
+      process.env.APP_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+    const baseUrl = configuredBaseUrl || runtimeBaseUrl || "http://localhost:3000";
+    const redirectTo = new URL("/auth/complete-invite", baseUrl).toString();
 
     // Resend invitation via Supabase Auth
     const { error: inviteError } =
@@ -57,7 +63,7 @@ export async function POST(
     if (inviteError) {
       console.error("Supabase invite error:", inviteError);
       return NextResponse.json(
-        { error: `Error al reenviar invitación: ${inviteError.message}` },
+        { error: `Error resending invitation: ${inviteError.message}` },
         { status: 500 }
       );
     }
@@ -80,7 +86,7 @@ export async function POST(
     if (updateError) {
       console.error("Error updating invitation:", updateError);
       return NextResponse.json(
-        { error: "Error al actualizar invitación" },
+        { error: "Error updating invitation" },
         { status: 500 }
       );
     }
@@ -88,12 +94,12 @@ export async function POST(
     return NextResponse.json({
       success: true,
       invitation: updatedInvitation,
-      message: `Invitación reenviada a ${invitation.email}`,
+      message: `Invitation resent to ${invitation.email}`,
     });
   } catch (error) {
     console.error("Unexpected error:", error);
     return NextResponse.json(
-      { error: "Error inesperado al reenviar invitación" },
+      { error: "Unexpected error resending invitation" },
       { status: 500 }
     );
   }

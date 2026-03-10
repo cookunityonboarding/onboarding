@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   if (existingUser) {
     return NextResponse.json(
       {
-        error: `El usuario ${normalizedEmail} ya existe en el sistema. No se puede invitar de nuevo.`,
+        error: `User ${normalizedEmail} already exists in the system. A new invitation cannot be sent.`,
       },
       { status: 400 }
     );
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
     if (expiresAt && expiresAt > now) {
       return NextResponse.json(
         {
-          error: `Ya existe una invitación pendiente para ${normalizedEmail}. Usa la función de reenviar si deseas enviar el email nuevamente.`,
+          error: `A pending invitation already exists for ${normalizedEmail}. Use resend invitation if you want to send the email again.`,
         },
         { status: 400 }
       );
@@ -67,11 +67,17 @@ export async function POST(req: Request) {
   try {
     // Generate unique token for tracking
     const token = crypto.randomUUID();
-    
-    // Build redirect URL dynamically from request headers
-    const protocol = req.headers.get('x-forwarded-proto') || 'http';
-    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
-    const redirectTo = `${protocol}://${host}/auth/complete-invite`;
+
+    // Build redirect URL with stable fallbacks for local and deployed environments.
+    const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
+    const forwardedHost = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    const runtimeBaseUrl = forwardedHost ? `${forwardedProto}://${forwardedHost}` : null;
+    const configuredBaseUrl =
+      process.env.APP_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+    const baseUrl = configuredBaseUrl || runtimeBaseUrl || "http://localhost:3000";
+    const redirectTo = new URL("/auth/complete-invite", baseUrl).toString();
 
     // Invite user via Supabase Auth (sends email automatically)
     const { error: inviteError } =
@@ -86,7 +92,7 @@ export async function POST(req: Request) {
     if (inviteError) {
       console.error("Supabase invite error:", inviteError);
       return NextResponse.json(
-        { error: `Error al enviar invitación: ${inviteError.message}` },
+        { error: `Error sending invitation: ${inviteError.message}` },
         { status: 500 }
       );
     }
@@ -117,7 +123,7 @@ export async function POST(req: Request) {
       if (error) {
         console.error("Error updating invitation:", error);
         return NextResponse.json(
-          { error: "Error al guardar invitación" },
+          { error: "Error saving invitation" },
           { status: 500 }
         );
       }
@@ -143,7 +149,7 @@ export async function POST(req: Request) {
       if (error) {
         console.error("Error creating invitation:", error);
         return NextResponse.json(
-          { error: "Error al guardar invitación" },
+          { error: "Error saving invitation" },
           { status: 500 }
         );
       }
@@ -154,12 +160,12 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       invitation: invitationRecord,
-      message: `Invitación enviada a ${normalizedEmail}`,
+      message: `Invitation sent to ${normalizedEmail}`,
     });
   } catch (error) {
     console.error("Unexpected error:", error);
     return NextResponse.json(
-      { error: "Error inesperado al crear invitación" },
+      { error: "Unexpected error creating invitation" },
       { status: 500 }
     );
   }

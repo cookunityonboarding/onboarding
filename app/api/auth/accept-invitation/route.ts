@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     if (fetchError) {
       console.error("Error fetching invitation:", fetchError);
       return NextResponse.json(
-        { error: "Error al buscar invitación" },
+        { error: "Error finding invitation" },
         { status: 500 }
       );
     }
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       if (updateError) {
         console.error("Error updating invitation:", updateError);
         return NextResponse.json(
-          { error: "Error al actualizar invitación" },
+          { error: "Error updating invitation" },
           { status: 500 }
         );
       }
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Unexpected error:", error);
     return NextResponse.json(
-      { error: "Error inesperado" },
+      { error: "Unexpected error" },
       { status: 500 }
     );
   }
