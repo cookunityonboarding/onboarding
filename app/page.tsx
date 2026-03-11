@@ -10,21 +10,33 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("disabled") === "1") {
+      setError("Your account is disabled. Contact your supervisor.");
+    }
+  }, []);
+
   const getLandingRoute = async () => {
     try {
       const res = await fetch("/api/auth/me", { cache: "no-store" });
       const payload = await res.json();
+      const active = payload?.user?.active;
       const role = payload?.user?.role;
       const supervisorRoles = ["supervisor", "manager", "assistant_manager"];
 
+      if (active === false) {
+        return { route: null, disabled: true };
+      }
+
       if (supervisorRoles.includes(role)) {
-        return "/supervisor/trainees";
+        return { route: "/supervisor/trainees", disabled: false };
       }
     } catch (e) {
       console.error("Could not resolve landing route:", e);
     }
 
-    return "/modules";
+    return { route: "/modules", disabled: false };
   };
 
   // If there is already a session, redirect to the appropriate role home.
@@ -33,7 +45,15 @@ export default function Home() {
       const { data }: { data: { session: any } } = await supabase.auth.getSession();
       if (data.session) {
         const destination = await getLandingRoute();
-        router.push(destination);
+        if (destination.disabled) {
+          await supabase.auth.signOut();
+          setError("Your account is disabled. Contact your supervisor.");
+          return;
+        }
+
+        if (destination.route) {
+          router.push(destination.route);
+        }
       }
     };
 
@@ -50,7 +70,15 @@ export default function Home() {
       setError(error.message);
     } else {
       const destination = await getLandingRoute();
-      router.push(destination);
+      if (destination.disabled) {
+        await supabase.auth.signOut();
+        setError("Your account is disabled. Contact your supervisor.");
+        return;
+      }
+
+      if (destination.route) {
+        router.push(destination.route);
+      }
     }
   };
 

@@ -30,12 +30,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  // Get active trainees
+  // Get trainees (active and disabled)
   const { data: traineesData, error } = await auth.supabaseAdmin
     .from("users")
     .select("id,email,name,role,active,created_at")
     .eq("role", "trainee")
-    .eq("active", true)
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -76,7 +75,7 @@ export async function GET(req: Request) {
         created_at: trainee.created_at,
         completedModules: completedModules ?? 0,
         totalModules: totalModules ?? 0,
-        status: "active" as const,
+        status: trainee.active ? ("active" as const) : ("disabled" as const),
         invitationId: null,
       };
     })

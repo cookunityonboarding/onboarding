@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../../hooks/useAuth";
 import { supabase } from "../../../lib/supabaseClient";
 
@@ -14,7 +14,7 @@ type Trainee = {
   created_at: string;
   completedModules: number;
   totalModules: number;
-  status: "active" | "pending" | "expired";
+  status: "active" | "disabled" | "pending" | "expired";
   invitationId: string | null;
   expiresAt?: string | null;
 };
@@ -24,51 +24,59 @@ export default function SupervisorTraineesPage() {
   const [trainees, setTrainees] = useState<Trainee[]>([]);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [fetchSuccess, setFetchSuccess] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteForm, setInviteForm] = useState({ name: "", email: "" });
   const [inviting, setInviting] = useState(false);
   const [resending, setResending] = useState<Record<string, boolean>>({});
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [selectedTrainee, setSelectedTrainee] = useState<Trainee | null>(null);
+  const [manageName, setManageName] = useState("");
+  const [manageActive, setManageActive] = useState(true);
+  const [savingManage, setSavingManage] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+
+  const loadTrainees = useCallback(async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("No active session");
+      }
+
+      const res = await fetch("/api/supervisor/trainees", {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const payload = await res.json();
+
+      if (!res.ok) {
+        throw new Error(payload.error || "Could not load trainees");
+      }
+
+      setTrainees(payload.trainees || []);
+    } catch (error) {
+      console.error("Error loading trainees:", error);
+      setFetchError("Could not load trainees. Please refresh the page.");
+    } finally {
+      setFetchLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const loadTrainees = async () => {
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (!session?.access_token) {
-          throw new Error("No active session");
-        }
-
-        const res = await fetch("/api/supervisor/trainees", {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        });
-        const payload = await res.json();
-
-        if (!res.ok) {
-          throw new Error(payload.error || "Could not load trainees");
-        }
-
-        setTrainees(payload.trainees || []);
-      } catch (error) {
-        console.error("Error loading trainees:", error);
-        setFetchError("Could not load trainees. Please refresh the page.");
-      } finally {
-        setFetchLoading(false);
-      }
-    };
-
     if (user) {
       loadTrainees();
     }
-  }, [user]);
+  }, [user, loadTrainees]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setInviting(true);
     setFetchError(null);
+    setFetchSuccess(null);
 
     try {
       const {
@@ -94,17 +102,7 @@ export default function SupervisorTraineesPage() {
         throw new Error(payload.error || "Could not send invitation");
       }
 
-      // Reload trainees
-      const reloadRes = await fetch("/api/supervisor/trainees", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      const reloadPayload = await reloadRes.json();
-
-      if (reloadRes.ok) {
-        setTrainees(reloadPayload.trainees || []);
-      }
+      await loadTrainees();
 
       // Reset form and close modal
       setInviteForm({ name: "", email: "" });
@@ -122,6 +120,7 @@ export default function SupervisorTraineesPage() {
   const handleResend = async (invitationId: string) => {
     setResending((prev) => ({ ...prev, [invitationId]: true }));
     setFetchError(null);
+    setFetchSuccess(null);
 
     try {
       const {
@@ -148,17 +147,7 @@ export default function SupervisorTraineesPage() {
         throw new Error(payload.error || "Could not resend invitation");
       }
 
-      // Reload trainees
-      const reloadRes = await fetch("/api/supervisor/trainees", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
-      const reloadPayload = await reloadRes.json();
-
-      if (reloadRes.ok) {
-        setTrainees(reloadPayload.trainees || []);
-      }
+      await loadTrainees();
     } catch (error) {
       console.error("Error resending invitation:", error);
       setFetchError(
@@ -166,6 +155,108 @@ export default function SupervisorTraineesPage() {
       );
     } finally {
       setResending((prev) => ({ ...prev, [invitationId]: false }));
+    }
+  };
+
+  const openManageModal = (trainee: Trainee) => {
+    setSelectedTrainee(trainee);
+    setManageName(trainee.name || "");
+    setManageActive(trainee.active);
+    setShowManageModal(true);
+  };
+
+  const closeManageModal = () => {
+    setShowManageModal(false);
+    setSelectedTrainee(null);
+    setManageName("");
+    setManageActive(true);
+  };
+
+  const handleSaveTrainee = async () => {
+    if (!selectedTrainee) return;
+
+    setSavingManage(true);
+    setFetchError(null);
+    setFetchSuccess(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("No active session");
+      }
+
+      const res = await fetch(`/api/supervisor/trainees/${selectedTrainee.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          name: manageName,
+          active: manageActive,
+        }),
+      });
+
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload.error || "Could not update trainee");
+      }
+
+      await loadTrainees();
+      setFetchSuccess("Trainee updated successfully.");
+      closeManageModal();
+    } catch (error) {
+      console.error("Error updating trainee:", error);
+      setFetchError(error instanceof Error ? error.message : "Could not update trainee");
+    } finally {
+      setSavingManage(false);
+    }
+  };
+
+  const handleSendResetEmail = async () => {
+    if (!selectedTrainee) return;
+
+    setSendingReset(true);
+    setFetchError(null);
+    setFetchSuccess(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("No active session");
+      }
+
+      const res = await fetch(
+        `/api/supervisor/trainees/${selectedTrainee.id}/reset-password`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload.error || "Could not send password reset email");
+      }
+
+      setFetchSuccess(`Password reset email sent to ${selectedTrainee.email}.`);
+    } catch (error) {
+      console.error("Error sending password reset email:", error);
+      setFetchError(
+        error instanceof Error
+          ? error.message
+          : "Could not send password reset email"
+      );
+    } finally {
+      setSendingReset(false);
     }
   };
 
@@ -207,6 +298,7 @@ export default function SupervisorTraineesPage() {
       <p className="text-gray-600 mb-6">Select a trainee to review modules, responses, and grading status.</p>
 
       {fetchError ? <p className="text-red-600 mb-4">{fetchError}</p> : null}
+      {fetchSuccess ? <p className="text-green-700 mb-4">{fetchSuccess}</p> : null}
 
       {trainees.length === 0 ? (
         <p className="text-gray-500">No active trainees found.</p>
@@ -217,8 +309,10 @@ export default function SupervisorTraineesPage() {
               ? (trainee.completedModules / trainee.totalModules) * 100
               : 0;
 
+            const isInvitation = trainee.status === "pending" || trainee.status === "expired";
+
             // Determine if card should be clickable
-            const isClickable = trainee.status === "active";
+            const isClickable = !isInvitation;
 
             return (
               <div
@@ -248,6 +342,11 @@ export default function SupervisorTraineesPage() {
                       Pending invitation
                     </span>
                   )}
+                  {trainee.status === "disabled" && (
+                    <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                      Disabled
+                    </span>
+                  )}
                   {trainee.status === "expired" && (
                     <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
                       Expired
@@ -255,7 +354,7 @@ export default function SupervisorTraineesPage() {
                   )}
                 </div>
 
-                {trainee.status === "active" ? (
+                {!isInvitation ? (
                   <div className="mt-4">
                     <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
                       <span>Training Progress</span>
@@ -268,6 +367,14 @@ export default function SupervisorTraineesPage() {
                         className="bg-green-600 h-2 rounded-full transition-all"
                         style={{ width: `${progressPercentage}%` }}
                       />
+                    </div>
+                    <div className="mt-3">
+                      <button
+                        onClick={() => openManageModal(trainee)}
+                        className="rounded-full bg-[#ffc84e] px-4 py-2 text-sm font-semibold text-black hover:bg-[#ffb81c]"
+                      >
+                        Manage User
+                      </button>
                     </div>
                   </div>
                 ) : (
@@ -339,6 +446,77 @@ export default function SupervisorTraineesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showManageModal && selectedTrainee && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold text-[#2C282B] mb-2">Manage Trainee</h2>
+            <p className="text-sm text-gray-600 mb-4">{selectedTrainee.email}</p>
+
+            <div className="mb-4">
+              <label htmlFor="manage-name" className="block text-sm font-medium text-gray-700 mb-1">
+                Name
+              </label>
+              <input
+                id="manage-name"
+                type="text"
+                value={manageName}
+                onChange={(e) => setManageName(e.target.value)}
+                className="w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+              />
+            </div>
+
+            <div className="mb-6 flex items-center justify-between rounded-md border border-gray-200 p-3">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Account status</p>
+                <p className="text-xs text-gray-500">
+                  {manageActive ? "Enabled (can access platform)" : "Disabled (blocked from API access)"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManageActive((prev) => !prev)}
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                  manageActive
+                    ? "bg-green-100 text-green-800 hover:bg-green-200"
+                    : "bg-red-100 text-red-800 hover:bg-red-200"
+                }`}
+              >
+                {manageActive ? "Enabled" : "Disabled"}
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={handleSendResetEmail}
+                disabled={sendingReset}
+                className="rounded-full bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {sendingReset ? "Sending reset email..." : "Send Password Reset Email"}
+              </button>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={closeManageModal}
+                className="rounded-full bg-gray-200 px-5 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTrainee}
+                disabled={savingManage}
+                className="rounded-full bg-[#ffc84e] px-5 py-2 text-sm font-semibold text-black hover:bg-[#ffb81c] disabled:opacity-50"
+              >
+                {savingManage ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
           </div>
         </div>
       )}

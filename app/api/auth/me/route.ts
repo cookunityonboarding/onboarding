@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data: user, error } = await supabaseAdmin
     .from("users")
-    .select("id,email,role,name")
+    .select("id,email,role,name,active")
     .eq("id", authUser.id)
     .maybeSingle();
 

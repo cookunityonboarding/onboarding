@@ -8,7 +8,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
   // hide sidebar on login
-  if (pathname === "/") return null;
+  if (pathname === "/" || !user) return null;
 
   const isSupervisorView =
     user?.role === "supervisor" ||

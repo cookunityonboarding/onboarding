@@ -169,3 +169,67 @@ export async function GET(
     modules: moduleCards,
   });
 }
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ traineeId: string }> }
+) {
+  const auth = await requireApiUser(req, [
+    "supervisor",
+    "manager",
+    "assistant_manager",
+  ]);
+
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const { traineeId } = await params;
+
+  if (!traineeId) {
+    return NextResponse.json({ error: "Invalid trainee id" }, { status: 400 });
+  }
+
+  const body = await req.json().catch(() => null);
+  const incomingName = body?.name;
+  const incomingActive = body?.active;
+
+  if (typeof incomingName !== "string" && typeof incomingActive !== "boolean") {
+    return NextResponse.json(
+      { error: "Provide at least one editable field: name or active" },
+      { status: 400 }
+    );
+  }
+
+  const updates: { name?: string; active?: boolean } = {};
+
+  if (typeof incomingName === "string") {
+    const normalizedName = incomingName.trim();
+    if (!normalizedName) {
+      return NextResponse.json({ error: "Name cannot be empty" }, { status: 400 });
+    }
+    updates.name = normalizedName;
+  }
+
+  if (typeof incomingActive === "boolean") {
+    updates.active = incomingActive;
+  }
+
+  const { data: updatedUser, error: updateError } = await auth.supabaseAdmin
+    .from("users")
+    .update(updates)
+    .eq("id", traineeId)
+    .eq("role", "trainee")
+    .select("id,email,name,role,active")
+    .single();
+
+  if (updateError || !updatedUser) {
+    return NextResponse.json({ error: "Trainee not found or update failed" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    success: true,
+    trainee: updatedUser,
+    message: "Trainee updated successfully",
+  });
+}

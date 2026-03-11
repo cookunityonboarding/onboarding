@@ -8,6 +8,7 @@ interface Profile {
   email: string;
   role: string;
   name?: string;
+  active: boolean;
 }
 
 export function useAuth() {
@@ -15,6 +16,20 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    async function handleDisabledAccount() {
+      setUser(null);
+      setLoading(false);
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // no-op
+      }
+
+      if (typeof window !== "undefined") {
+        window.location.replace("/?disabled=1");
+      }
+    }
+
     async function fetchProfile(): Promise<Profile | null> {
       const res = await fetch("/api/auth/me", { cache: "no-store" });
       const payload = await res.json();
@@ -45,6 +60,11 @@ export function useAuth() {
       try {
         const profile = await fetchProfile();
         if (profile) {
+          if (!profile.active) {
+            await handleDisabledAccount();
+            return;
+          }
+
           setUser(profile);
           return;
         }
@@ -53,6 +73,11 @@ export function useAuth() {
         await syncProfileFromSession(session);
         const syncedProfile = await fetchProfile();
         if (syncedProfile) {
+          if (!syncedProfile.active) {
+            await handleDisabledAccount();
+            return;
+          }
+
           setUser(syncedProfile);
         }
       } catch (e) {

@@ -5,6 +5,7 @@ type AppUser = {
   email: string;
   role: string;
   name?: string;
+  active: boolean;
 };
 
 type AuthResult =
@@ -59,7 +60,7 @@ export async function requireApiUser(
 
   const { data: profile, error: profileError } = await supabaseAdmin
     .from("users")
-    .select("id,email,role,name")
+    .select("id,email,role,name,active")
     .eq("id", authUser.id)
     .single();
 
@@ -69,6 +70,10 @@ export async function requireApiUser(
 
   if (!allowedRoles.includes(profile.role)) {
     return { ok: false, status: 403, error: "Insufficient role permissions" };
+  }
+
+  if (!profile.active) {
+    return { ok: false, status: 403, error: "Account disabled" };
   }
 
   return { ok: true, supabaseAdmin, user: profile };

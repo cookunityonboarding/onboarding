@@ -1,6 +1,7 @@
 "use client";
 
 import { Geist, Geist_Mono } from "next/font/google";
+import { useState } from "react";
 import "./globals.css";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../hooks/useAuth";
@@ -24,10 +25,59 @@ export default function RootLayout({
 }>) {
   const { user } = useAuth();
   const router = useRouter();
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [updatingPassword, setUpdatingPassword] = useState(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/");
+  };
+
+  const closePasswordModal = () => {
+    setShowPasswordModal(false);
+    setNewPassword("");
+    setConfirmPassword("");
+    setPasswordError(null);
+    setPasswordSuccess(null);
+    setUpdatingPassword(false);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+    setPasswordSuccess(null);
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setUpdatingPassword(true);
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+
+    if (error) {
+      setPasswordError(error.message);
+      setUpdatingPassword(false);
+      return;
+    }
+
+    setPasswordSuccess("Password updated successfully.");
+    setUpdatingPassword(false);
+    setTimeout(() => {
+      closePasswordModal();
+    }, 1200);
   };
 
   return (
@@ -47,6 +97,12 @@ export default function RootLayout({
                 <div></div>
                 <div className="flex items-center gap-4">
                   <span>Welcome, {user.name || user.email}</span>
+                  <button
+                    onClick={() => setShowPasswordModal(true)}
+                    className="bg-white text-[#2C282B] px-4 py-2 rounded-full hover:bg-gray-100 font-semibold"
+                  >
+                    Change Password
+                  </button>
                   <button onClick={handleLogout} className="bg-[#ffc84e] text-black px-4 py-2 rounded-full hover:bg-[#ffb81c]">
                     Logout
                   </button>
@@ -54,6 +110,68 @@ export default function RootLayout({
               </header>
             )}
             {children}
+
+            {showPasswordModal && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+                  <h2 className="text-xl font-bold text-[#2C282B] mb-4">Change Password</h2>
+
+                  <form onSubmit={handleChangePassword} className="space-y-4">
+                    <div>
+                      <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
+                        New Password
+                      </label>
+                      <input
+                        id="newPassword"
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                        placeholder="Minimum 6 characters"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+                        Confirm New Password
+                      </label>
+                      <input
+                        id="confirmPassword"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                        placeholder="Repeat new password"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+
+                    {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
+                    {passwordSuccess && <p className="text-sm text-green-700">{passwordSuccess}</p>}
+
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={closePasswordModal}
+                        className="rounded-full bg-gray-200 px-5 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-300"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={updatingPassword}
+                        className="rounded-full bg-[#ffc84e] px-5 py-2 text-sm font-semibold text-black hover:bg-[#ffb81c] disabled:opacity-50"
+                      >
+                        {updatingPassword ? "Updating..." : "Update Password"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </main>
         </div>
       </body>
