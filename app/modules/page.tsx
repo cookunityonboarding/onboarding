@@ -23,8 +23,21 @@ export default function ModulesPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [modules, setModules] = useState<Module[]>([]);
+  const [selectedWeek, setSelectedWeek] = useState(1);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const weekFromUrl = Number(params.get("week") || "1");
+    if (Number.isInteger(weekFromUrl) && weekFromUrl > 0) {
+      setSelectedWeek(weekFromUrl);
+    }
+  }, []);
 
   useEffect(() => {
     const supervisorRoles = ["supervisor", "manager", "assistant_manager"];
@@ -45,7 +58,7 @@ export default function ModulesPage() {
           throw new Error("No active session");
         }
 
-        const res = await fetch("/api/modules", {
+        const res = await fetch(`/api/modules?week=${selectedWeek}`, {
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
@@ -67,7 +80,15 @@ export default function ModulesPage() {
     if (user) {
       fetchModules();
     }
-  }, [user, router]);
+  }, [user, router, selectedWeek]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    router.replace(`/modules?week=${selectedWeek}`);
+  }, [selectedWeek, router, user]);
 
   if (loading || fetchLoading) return <p className="p-8">Loading...</p>;
 
@@ -86,7 +107,27 @@ export default function ModulesPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6 text-[#2C282B]">Training Modules - Week 1</h1>
+      <h1 className="text-2xl font-bold mb-4 text-[#2C282B]">Training Modules</h1>
+      <div className="mb-6 inline-flex rounded-full border border-gray-300 bg-white p-1">
+        <button
+          type="button"
+          onClick={() => setSelectedWeek(1)}
+          className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+            selectedWeek === 1 ? "bg-[#2C282B] text-white" : "text-gray-700 hover:bg-gray-100"
+          }`}
+        >
+          Week 1
+        </button>
+        <button
+          type="button"
+          onClick={() => setSelectedWeek(2)}
+          className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+            selectedWeek === 2 ? "bg-[#2C282B] text-white" : "text-gray-700 hover:bg-gray-100"
+          }`}
+        >
+          Week 2
+        </button>
+      </div>
       <p className="mb-8 text-gray-600">Welcome, {user.name || user.email}! Here are your training modules.</p>
 
       {fetchError && <p className="mb-6 text-sm text-red-600">{fetchError}</p>}
@@ -95,7 +136,7 @@ export default function ModulesPage() {
         <div className="sticky top-0 z-10 bg-white border-b border-gray-200 py-3 mb-6">
           <p className="text-xs text-gray-500 mb-2">Quick navigation:</p>
           <div className="flex flex-wrap gap-2">
-            {modules.map((module, index) => (
+            {modules.map((module) => (
               <a
                 key={`nav-${module.id}`}
                 href={`#module-${module.id}`}
@@ -106,7 +147,7 @@ export default function ModulesPage() {
                 }`}
                 title={module.title}
               >
-                {index + 1}
+                {module.sort_order}
               </a>
             ))}
           </div>
@@ -114,8 +155,8 @@ export default function ModulesPage() {
       )}
 
       <div className="space-y-5">
-        {modules.map((module, index) => (
-          <Link key={module.id} href={`/modules/${module.id}`}>
+        {modules.map((module) => (
+          <Link key={module.id} href={`/modules/${module.id}?week=${selectedWeek}`}>
             <div
               id={`module-${module.id}`}
               className="w-full bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow cursor-pointer scroll-mt-24"
@@ -123,7 +164,7 @@ export default function ModulesPage() {
               <div className="flex items-center mb-3">
                 {module.icon && <span className="text-2xl mr-3">{module.icon}</span>}
                 <h2 className="text-lg font-semibold text-[#2C282B]">
-                  Module {index + 1}. {module.title}
+                  Module {module.sort_order}. {module.title}
                 </h2>
               </div>
               <p className="text-gray-700 mb-4">{module.objective}</p>

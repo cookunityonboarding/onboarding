@@ -14,6 +14,8 @@ type ExerciseRow = {
   module_id: number;
   question: string;
   type: string;
+  data: { options?: string[] } | null;
+  correct_answer: { correctOptionIndex?: number } | null;
 };
 
 type ResponseRow = {
@@ -83,7 +85,7 @@ export async function GET(
 
   const { data: exercisesData, error: exercisesError } = await auth.supabaseAdmin
     .from("exercises")
-    .select("id,module_id,question,type")
+    .select("id,module_id,question,type,data,correct_answer")
     .in("module_id", moduleIds)
     .order("id", { ascending: true });
 
@@ -134,7 +136,14 @@ export async function GET(
     const moduleExercises = exercises
       .filter((exercise) => exercise.module_id === moduleRow.id)
       .map((exercise) => ({
-        ...exercise,
+        id: exercise.id,
+        module_id: exercise.module_id,
+        question: exercise.question,
+        type: exercise.type,
+        options: Array.isArray(exercise.data?.options) ? exercise.data?.options : [],
+        correctOptionIndex: Number.isInteger(Number(exercise.correct_answer?.correctOptionIndex))
+          ? Number(exercise.correct_answer?.correctOptionIndex)
+          : null,
         response: latestResponseByExercise[exercise.id] ?? null,
       }));
 

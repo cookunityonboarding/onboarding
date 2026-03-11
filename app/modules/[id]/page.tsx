@@ -18,6 +18,11 @@ type Exercise = {
   question: string;
   type: string;
   grading: string;
+  options?: string[];
+  review?: {
+    selectedOptionIndex: number | null;
+    correctOptionIndex: number | null;
+  } | null;
   response: ExerciseResponse | null;
 };
 
@@ -45,8 +50,21 @@ export default function ModuleDetailPage() {
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [returnWeek, setReturnWeek] = useState(1);
 
   const canSubmitChallenges = user?.role === "trainee";
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const weekFromUrl = Number(params.get("week") || "1");
+    if (Number.isInteger(weekFromUrl) && weekFromUrl > 0) {
+      setReturnWeek(weekFromUrl);
+    }
+  }, []);
 
   useEffect(() => {
     const fetchModuleDetail = async () => {
@@ -137,9 +155,10 @@ export default function ModuleDetailPage() {
                 ...exercise,
                 response: {
                   answer,
-                  correct: null,
-                  graded_at: null,
+                  correct: payload.response?.correct ?? null,
+                  graded_at: payload.response?.graded_at ?? null,
                 },
+                review: payload.review ?? exercise.review ?? null,
               }
             : exercise
         )
@@ -189,7 +208,7 @@ export default function ModuleDetailPage() {
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto">
-      <Link href="/modules" className="text-sm text-[#2C282B] underline">
+      <Link href={`/modules?week=${returnWeek}`} className="text-sm text-[#2C282B] underline">
         Back to all modules
       </Link>
 
@@ -197,7 +216,9 @@ export default function ModuleDetailPage() {
         <div className="flex items-start gap-3 mb-4">
           {moduleData.icon ? <span className="text-2xl">{moduleData.icon}</span> : null}
           <div>
-            <h1 className="text-2xl font-bold text-[#2C282B]">{moduleData.title}</h1>
+            <h1 className="text-2xl font-bold text-[#2C282B]">
+              Module {moduleData.sort_order}. {moduleData.title}
+            </h1>
             <p className="text-sm text-gray-500 mt-1">Week {moduleData.week}</p>
           </div>
         </div>
@@ -239,37 +260,93 @@ export default function ModuleDetailPage() {
           <div className="space-y-4">
             {exercises.map((exercise) => (
               <div key={exercise.id} className="rounded-md border border-gray-200 p-4">
-                <p className="font-medium text-[#2C282B] mb-2">{exercise.question}</p>
+                <p className="font-medium text-[#2C282B] mb-2 whitespace-pre-wrap">{exercise.question}</p>
                 <p className="text-xs text-gray-500 mb-3">Type: {exercise.type}</p>
 
                 {canSubmitChallenges ? (
                   <div className="mb-4">
-                    <label
-                      htmlFor={`exercise-answer-${exercise.id}`}
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
-                      Your answer
-                    </label>
-                    <textarea
-                      id={`exercise-answer-${exercise.id}`}
-                      value={draftAnswers[exercise.id] || ""}
-                      onChange={(event) =>
-                        setDraftAnswers((prev) => ({
-                          ...prev,
-                          [exercise.id]: event.target.value,
-                        }))
-                      }
-                      rows={5}
-                      className="w-full rounded-md border border-gray-300 p-3 text-sm focus:border-[#ffc84e] focus:outline-none focus:ring-2 focus:ring-[#ffc84e]"
-                      placeholder="Write your challenge response here..."
-                    />
+                    {exercise.type === "multiple_choice" ? (
+                      <div>
+                        <p className="block text-sm font-medium text-gray-700 mb-2">Choose one option</p>
+                        <div className="space-y-2">
+                          {(exercise.options ?? []).map((option, optionIndex) => {
+                            const hasSubmitted = Boolean(exercise.response);
+                            const selectedOptionIndex = exercise.review?.selectedOptionIndex;
+                            const correctOptionIndex = exercise.review?.correctOptionIndex;
+
+                            const isSelected = selectedOptionIndex === optionIndex;
+                            const isCorrectOption = correctOptionIndex === optionIndex;
+
+                            let resultClass = "border-gray-300 bg-white";
+                            if (hasSubmitted && isCorrectOption) {
+                              resultClass = "border-green-300 bg-green-50";
+                            } else if (hasSubmitted && isSelected && !isCorrectOption) {
+                              resultClass = "border-red-300 bg-red-50";
+                            }
+
+                            return (
+                              <label
+                                key={`${exercise.id}-option-${optionIndex}`}
+                                className={`flex items-start gap-2 rounded-md border p-3 text-sm text-gray-800 ${resultClass}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`exercise-answer-${exercise.id}`}
+                                  value={String(optionIndex)}
+                                  checked={(draftAnswers[exercise.id] || "") === String(optionIndex)}
+                                  disabled={hasSubmitted}
+                                  onChange={(event) =>
+                                    setDraftAnswers((prev) => ({
+                                      ...prev,
+                                      [exercise.id]: event.target.value,
+                                    }))
+                                  }
+                                  className="mt-1"
+                                />
+                                <span>{option}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <label
+                          htmlFor={`exercise-answer-${exercise.id}`}
+                          className="block text-sm font-medium text-gray-700 mb-2"
+                        >
+                          Your answer
+                        </label>
+                        <textarea
+                          id={`exercise-answer-${exercise.id}`}
+                          value={draftAnswers[exercise.id] || ""}
+                          onChange={(event) =>
+                            setDraftAnswers((prev) => ({
+                              ...prev,
+                              [exercise.id]: event.target.value,
+                            }))
+                          }
+                          rows={5}
+                          className="w-full rounded-md border border-gray-300 p-3 text-sm focus:border-[#ffc84e] focus:outline-none focus:ring-2 focus:ring-[#ffc84e]"
+                          placeholder="Write your challenge response here..."
+                        />
+                      </>
+                    )}
+
                     <button
                       type="button"
                       onClick={() => handleSubmitChallenge(exercise.id)}
-                      disabled={Boolean(savingByExercise[exercise.id])}
+                      disabled={
+                        Boolean(savingByExercise[exercise.id]) ||
+                        (exercise.type === "multiple_choice" && Boolean(exercise.response))
+                      }
                       className="mt-3 rounded-full bg-[#ffc84e] px-4 py-2 text-sm font-medium text-black hover:bg-[#ffb81c] disabled:opacity-50"
                     >
-                      {savingByExercise[exercise.id] ? "Submitting..." : "Submit Response"}
+                      {savingByExercise[exercise.id]
+                        ? "Submitting..."
+                        : exercise.type === "multiple_choice" && exercise.response
+                        ? "Already Submitted"
+                        : "Submit Response"}
                     </button>
                   </div>
                 ) : null}

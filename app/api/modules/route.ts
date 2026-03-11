@@ -30,10 +30,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  const searchParams = new URL(req.url).searchParams;
+  const rawWeek = searchParams.get("week");
+  const parsedWeek = rawWeek ? Number(rawWeek) : 1;
+  const selectedWeek = Number.isInteger(parsedWeek) && parsedWeek > 0 ? parsedWeek : 1;
+
   const { data, error } = await auth.supabaseAdmin
     .from("modules")
     .select("id, title, objective, icon, week, sort_order, criteria_list")
-    .eq("week", 1)
+    .eq("week", selectedWeek)
     .order("sort_order", { ascending: true });
 
   if (error) {

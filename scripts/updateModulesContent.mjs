@@ -356,6 +356,51 @@ Learn how to evaluate, approve/reject, and create high-quality JIRAs that keep t
  1️⃣ What Is a JIRA & Why It Matters
 A JIRA is the official way we escalate a product/platform issue so it can be investigated and resolved by Product Support / Engineering.
 Incomplete or invalid JIRAs create noise, slow down real investigations, and increase customer impact — the goal is a clean, efficient pipeline.`
+  },
+  {
+    id: 10,
+    title: 'Wabi - Sabi Test',
+    week: 2,
+    sort_order: 10,
+    icon: '🧪',
+    objective: 'Evaluate WABI-SABI decision quality by applying policy and operational judgment to realistic escalation scenarios.',
+    criteria_list: [
+      'Submit responses for all 5 WABI-SABI scenarios',
+      'Justify each decision with policy and context',
+      'Demonstrate clear communication to the agent'
+    ],
+    content: `The WABI Playbook: Your Turn
+
+This module is an assessment with 5 free-text scenarios.
+For each case, decide whether to approve, deny, or correct the WABI-SABI request.
+Then explain your thought process and write how you would respond to the agent.
+
+Scenarios include:
+- Warm Meals
+- CAC (first-time customer cancellation)
+- Food Poisoning
+- CAC FW
+- Customer does not want the order`
+  },
+  {
+    id: 11,
+    title: 'Tagging Test',
+    week: 2,
+    sort_order: 11,
+    icon: '✅',
+    objective: 'Assess tagging accuracy across contact reason and sub-contact reason scenarios using multiple-choice questions.',
+    criteria_list: [
+      'Complete all multiple-choice questions',
+      'Apply correct tagging logic from routing content',
+      'Demonstrate consistency across mixed customer scenarios'
+    ],
+    content: `This module is an assessment focused on CX tagging.
+
+It includes multiple-choice questions across two sections:
+- Core tagging concepts
+- Applied tagging scenarios from realistic customer messages
+
+Choose one option per question and submit each answer.`
   }
 ];
 
@@ -378,12 +423,11 @@ async function seedModules() {
         criteria_list: moduleData.criteria_list
       };
 
-      // Update existing module with content and criteria_list
-      // First try with criteria_list, if it fails due to column missing, try without it
+      // Upsert module with content and criteria_list.
+      // First try with criteria_list, if it fails due to column missing, try without it.
       let { data: module, error: moduleError } = await supabase
         .from('modules')
-        .update(moduleForDb)
-        .eq('id', moduleData.id)
+        .upsert(moduleForDb, { onConflict: 'id' })
         .select()
         .single();
 
@@ -398,8 +442,7 @@ async function seedModules() {
 
         ({ data: module, error: moduleError } = await supabase
           .from('modules')
-          .update(moduleWithoutCriteria)
-          .eq('id', moduleData.id)
+          .upsert(moduleWithoutCriteria, { onConflict: 'id' })
           .select()
           .single());
       }

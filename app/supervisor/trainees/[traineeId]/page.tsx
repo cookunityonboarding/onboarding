@@ -28,6 +28,8 @@ type Exercise = {
   module_id: number;
   question: string;
   type: string;
+  options?: string[];
+  correctOptionIndex?: number | null;
   response: ResponseData | null;
 };
 
@@ -62,6 +64,7 @@ export default function SupervisorTraineeDetailPage() {
   const [gradingState, setGradingState] = useState<Record<number, boolean>>({});
   const [showRegrade, setShowRegrade] = useState<Record<number, boolean>>({});
   const [completionState, setCompletionState] = useState<Record<number, boolean>>({});
+  const [selectedWeek, setSelectedWeek] = useState<number>(1);
 
   const saveCompletion = async (
     moduleId: number,
@@ -123,6 +126,13 @@ export default function SupervisorTraineeDetailPage() {
 
         setTrainee(payload.trainee || null);
         setModules(payload.modules || []);
+
+        const weeks = Array.from(
+          new Set<number>((payload.modules || []).map((module: ModuleCard) => module.week))
+        ).sort((a, b) => a - b);
+        if (weeks.length > 0) {
+          setSelectedWeek(weeks[0]);
+        }
       } catch (error) {
         console.error("Error loading trainee detail:", error);
         setFetchError("Could not load trainee detail. Please refresh the page.");
@@ -359,6 +369,11 @@ export default function SupervisorTraineeDetailPage() {
     );
   }
 
+  const availableWeeks = Array.from(
+    new Set<number>(modules.map((moduleCard) => moduleCard.week))
+  ).sort((a, b) => a - b);
+  const visibleModules = modules.filter((moduleCard) => moduleCard.week === selectedWeek);
+
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto">
       <Link href="/supervisor/trainees" className="text-sm text-[#2C282B] underline">
@@ -370,14 +385,33 @@ export default function SupervisorTraineeDetailPage() {
       </h1>
       <p className="text-gray-600 mb-6">Review responses and grade each challenge.</p>
 
+      {availableWeeks.length > 0 ? (
+        <div className="mb-6 inline-flex rounded-full border border-gray-300 bg-white p-1">
+          {availableWeeks.map((weekNumber) => (
+            <button
+              key={`week-selector-${weekNumber}`}
+              type="button"
+              onClick={() => setSelectedWeek(weekNumber)}
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                selectedWeek === weekNumber
+                  ? "bg-[#2C282B] text-white"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Week {weekNumber}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {fetchError ? <p className="text-red-600 mb-4">{fetchError}</p> : null}
 
       {/* Quick navigation bar */}
-      {modules.length > 0 && (
+      {visibleModules.length > 0 && (
         <div className="sticky top-0 z-10 bg-white border-b border-gray-200 py-3 mb-6 -mx-6 px-6 md:-mx-8 md:px-8">
           <p className="text-xs text-gray-500 mb-2">Quick navigation:</p>
           <div className="flex flex-wrap gap-2">
-            {modules.map((moduleCard, index) => (
+            {visibleModules.map((moduleCard) => (
               <a
                 key={moduleCard.id}
                 href={`#module-${moduleCard.id}`}
@@ -388,7 +422,7 @@ export default function SupervisorTraineeDetailPage() {
                 }`}
                 title={moduleCard.title}
               >
-                {index + 1}
+                {moduleCard.sort_order}
               </a>
             ))}
           </div>
@@ -396,7 +430,7 @@ export default function SupervisorTraineeDetailPage() {
       )}
 
       <div className="space-y-5">
-        {modules.map((moduleCard, index) => (
+        {visibleModules.map((moduleCard) => (
           <section
             key={moduleCard.id}
             id={`module-${moduleCard.id}`}
@@ -405,7 +439,7 @@ export default function SupervisorTraineeDetailPage() {
             <div className="mb-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-2xl font-bold text-[#2C282B] mr-1">
-                  Module {index + 1}.
+                  Module {moduleCard.sort_order}.
                 </span>
                 <h2 className="text-lg font-semibold text-[#2C282B]">{moduleCard.title}</h2>
                 {moduleCard.completion.markedComplete ? (
@@ -426,58 +460,103 @@ export default function SupervisorTraineeDetailPage() {
               <div className="space-y-4">
                 {moduleCard.exercises.map((exercise) => (
                   <div key={exercise.id} className="rounded border border-gray-200 p-4">
-                    <p className="font-medium text-[#2C282B] mb-2">{exercise.question}</p>
+                    <p className="font-medium text-[#2C282B] mb-2 whitespace-pre-wrap">{exercise.question}</p>
                     {!exercise.response ? (
                       <p className="text-sm text-gray-500">No response submitted yet.</p>
                     ) : (
                       <>
-                        <p className="text-sm text-gray-600 mb-1">Trainee response:</p>
-                        <p className="text-sm whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded p-3 mb-3">
-                          {exercise.response.answer || "(empty)"}
-                        </p>
+                        {exercise.type === "multiple_choice" ? (
+                          <>
+                            <p className="text-sm text-gray-600 mb-2">Trainee selected:</p>
+                            <div className="space-y-2 mb-3">
+                              {(exercise.options ?? []).map((option, optionIndex) => {
+                                const selectedOptionIndex = Number(exercise.response?.answer);
+                                const isSelected = selectedOptionIndex === optionIndex;
+                                const isCorrect = exercise.correctOptionIndex === optionIndex;
 
-                        {exercise.response.correct === null ? (
-                          <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800 mb-3">
-                            Pending review
-                          </span>
+                                let optionClass = "border-gray-300 bg-white";
+                                if (isCorrect) {
+                                  optionClass = "border-green-300 bg-green-50";
+                                } else if (isSelected && !isCorrect) {
+                                  optionClass = "border-red-300 bg-red-50";
+                                }
+
+                                return (
+                                  <div
+                                    key={`${exercise.id}-supervisor-option-${optionIndex}`}
+                                    className={`rounded-md border p-3 text-sm text-gray-800 ${optionClass}`}
+                                  >
+                                    <span className="font-medium mr-2">{isSelected ? "(Selected)" : ""}</span>
+                                    {option}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <span
+                              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide mb-3 ${
+                                exercise.response.correct
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {exercise.response.correct ? "Approved" : "Not Approved"}
+                            </span>
+                          </>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowRegrade((prev) => ({
-                                ...prev,
-                                [exercise.response!.id]: !prev[exercise.response!.id],
-                              }))
-                            }
-                            className={`mb-3 inline-flex items-center rounded-full px-4 py-2 text-sm font-bold uppercase tracking-wide ${
-                              exercise.response.correct
-                                ? "bg-green-100 text-green-800 hover:bg-green-200"
-                                : "bg-red-100 text-red-800 hover:bg-red-200"
-                            }`}
-                          >
-                            {exercise.response.correct ? "[OK] Approved" : "[X] Not approved"} - Click to regrade
-                          </button>
-                        )}
+                          <>
+                            <p className="text-sm text-gray-600 mb-1">Trainee response:</p>
+                            <p className="text-sm whitespace-pre-wrap bg-gray-50 border border-gray-200 rounded p-3 mb-3">
+                              {exercise.response.answer || "(empty)"}
+                            </p>
 
-                        {(exercise.response.correct === null || showRegrade[exercise.response.id]) && (
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              disabled={Boolean(gradingState[exercise.response.id])}
-                              onClick={() => handleGrade(exercise.response!.id, true)}
-                              className="rounded-full bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              disabled={Boolean(gradingState[exercise.response.id])}
-                              onClick={() => handleGrade(exercise.response!.id, false)}
-                              className="rounded-full bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
-                            >
-                              Not Approved
-                            </button>
-                          </div>
+                            {exercise.response.correct === null ? (
+                              <span className="inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800 mb-3">
+                                Pending review
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowRegrade((prev) => ({
+                                    ...prev,
+                                    [exercise.response!.id]: !prev[exercise.response!.id],
+                                  }))
+                                }
+                                className={`mb-3 inline-flex items-center rounded-full px-4 py-2 text-sm font-bold uppercase tracking-wide ${
+                                  exercise.response.correct
+                                    ? "bg-green-100 text-green-800 hover:bg-green-200"
+                                    : "bg-red-100 text-red-800 hover:bg-red-200"
+                                }`}
+                              >
+                                {exercise.response.correct
+                                  ? "[OK] Approved"
+                                  : "[X] Not approved"}{" "}
+                                - Click to regrade
+                              </button>
+                            )}
+
+                            {(exercise.response.correct === null || showRegrade[exercise.response.id]) && (
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={Boolean(gradingState[exercise.response.id])}
+                                  onClick={() => handleGrade(exercise.response!.id, true)}
+                                  className="rounded-full bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={Boolean(gradingState[exercise.response.id])}
+                                  onClick={() => handleGrade(exercise.response!.id, false)}
+                                  className="rounded-full bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                                >
+                                  Not Approved
+                                </button>
+                              </div>
+                            )}
+                          </>
                         )}
                       </>
                     )}
@@ -544,6 +623,10 @@ export default function SupervisorTraineeDetailPage() {
           </section>
         ))}
       </div>
+
+      {availableWeeks.length > 0 && visibleModules.length === 0 ? (
+        <p className="text-sm text-gray-500 mt-6">No modules found for the selected week.</p>
+      ) : null}
     </div>
   );
 }

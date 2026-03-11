@@ -36,7 +36,7 @@ export async function GET(
 
   const { data: exercises, error: exercisesError } = await auth.supabaseAdmin
     .from("exercises")
-    .select("id,module_id,question,type,grading")
+    .select("id,module_id,question,type,grading,data,correct_answer")
     .eq("module_id", moduleId)
     .order("id", { ascending: true });
 
@@ -52,6 +52,8 @@ export async function GET(
       question: string;
       type: string;
       grading: string;
+      data: { options?: string[] } | null;
+      correct_answer: { correctOptionIndex?: number } | null;
     }>) ?? [];
 
   if (exercisesList.length > 0) {
@@ -85,10 +87,33 @@ export async function GET(
       }, {} as Record<number, { answer: string | null; correct: boolean | null; graded_at: string | null }>);
   }
 
-  const exercisesWithResponse = exercisesList.map((exercise) => ({
-    ...exercise,
-    response: responsesByExerciseId[exercise.id] ?? null,
-  }));
+  const exercisesWithResponse = exercisesList.map((exercise) => {
+    const latestResponse = responsesByExerciseId[exercise.id] ?? null;
+    const options = Array.isArray(exercise.data?.options) ? exercise.data?.options : [];
+    const selectedOptionIndex = latestResponse ? Number(latestResponse.answer) : null;
+    const correctOptionIndex = Number(exercise.correct_answer?.correctOptionIndex);
+
+    return {
+      id: exercise.id,
+      module_id: exercise.module_id,
+      question: exercise.question,
+      type: exercise.type,
+      grading: exercise.grading,
+      options,
+      response: latestResponse,
+      review:
+        exercise.type === "multiple_choice" && latestResponse
+          ? {
+              selectedOptionIndex: Number.isInteger(selectedOptionIndex)
+                ? selectedOptionIndex
+                : null,
+              correctOptionIndex: Number.isInteger(correctOptionIndex)
+                ? correctOptionIndex
+                : null,
+            }
+          : null,
+    };
+  });
 
   return NextResponse.json({
     module: moduleData,
