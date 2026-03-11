@@ -4,7 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { useState } from "react";
 import "./globals.css";
 import Sidebar from "../components/Sidebar";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, markIntentionalLogout } from "../hooks/useAuth";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabaseClient";
 
@@ -33,6 +33,7 @@ export default function RootLayout({
   const [updatingPassword, setUpdatingPassword] = useState(false);
 
   const handleLogout = async () => {
+    markIntentionalLogout();
     await supabase.auth.signOut();
     router.push("/");
   };

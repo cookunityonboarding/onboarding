@@ -14,6 +14,11 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("disabled") === "1") {
       setError("Your account is disabled. Contact your supervisor.");
+      return;
+    }
+
+    if (params.get("sessionExpired") === "1") {
+      setError("Your session has expired. Please sign in again.");
     }
   }, []);
 

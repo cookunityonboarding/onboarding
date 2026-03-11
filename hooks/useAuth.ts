@@ -1,7 +1,17 @@
 "use client";
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
+
+// Module-level flag shared by all useAuth instances in the same JS bundle.
+// Using a module variable (not sessionStorage) avoids the race condition where
+// the first of multiple concurrent SIGNED_OUT listeners consumes the flag
+// before the second one can read it.
+let _intentionalLogout = false;
+export function markIntentionalLogout() {
+  _intentionalLogout = true;
+}
 
 interface Profile {
   id: string;
@@ -14,8 +24,29 @@ interface Profile {
 export function useAuth() {
   const [user, setUser] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const pathname = usePathname();
 
   useEffect(() => {
+    function isPublicRoute(path: string | null) {
+      if (!path) {
+        return false;
+      }
+
+      return path === "/" || path.startsWith("/auth/");
+    }
+
+    function redirectToSessionExpired() {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      if (isPublicRoute(pathname)) {
+        return;
+      }
+
+      window.location.replace("/?sessionExpired=1");
+    }
+
     async function handleDisabledAccount() {
       setUser(null);
       setLoading(false);
@@ -91,17 +122,28 @@ export function useAuth() {
       } = await supabase.auth.getSession();
       if (session?.user) {
         await loadProfile(session);
+      } else {
+        setUser(null);
+        redirectToSessionExpired();
       }
       setLoading(false);
     }
     load();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event: AuthChangeEvent, session: Session | null) => {
+      async (event: AuthChangeEvent, session: Session | null) => {
         if (session?.user) {
           await loadProfile(session);
         } else {
           setUser(null);
+          if (event === "SIGNED_OUT") {
+            if (_intentionalLogout) {
+              // Clear it after this tick so all concurrent listeners see it as true
+              setTimeout(() => { _intentionalLogout = false; }, 0);
+            } else {
+              redirectToSessionExpired();
+            }
+          }
         }
       }
     );
@@ -109,7 +151,7 @@ export function useAuth() {
     return () => {
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [pathname]);
 
   return { user, loading };
 }
